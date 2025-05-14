@@ -2,24 +2,45 @@ import { createUnplugin } from 'unplugin';
 
 // TODO: we can add in bundler options here as we see fit
 // At some point it might make sense
-export const rapidUnplugin = createUnplugin((options) => {
+export const rapidUnplugin = createUnplugin((options = {}) => {
+    const {
+      minify = true,
+      sourceMap = true,
+      extensions = ['.tsx', '.ts'],
+      excludePatterns = [],
+      treeShakeClientCode = true,
+      debug = false
+    } = options;
+
     return {
       name: 'rapid-ssr-bundler',
-      // Here we want to only include .ts and .tsx (everything else we dont really care about)
       transformInclude(id) {
-        return id.endsWith(('.tsx', '.ts'))
+        if (excludePatterns.some(pattern => id.includes(pattern))) {
+          return false;
+        }
+        return extensions.some(ext => id.endsWith(ext));
       },
-      // This transform function does the same thing as rollup transform
-      // What we want to do here is replace any instance of client-side rapid code and tree-shake it out of the server bundle
-      // TODO: test to see if this would work with a entire component file?
       transform(code, id) {
-        if (code.includes('use-client') && id.includes('client_only')) {
+        if (treeShakeClientCode && code.includes('use-client') && id.includes('client_only')) {
           return '';
         }
-        return code
+
+        if (debug) {
+          console.log(`[rapid-ssr-bundler] Processing: ${id}`);
+        }
+
+        return {
+          code,
+          map: sourceMap ? null : undefined
+        };
       },
-    }
-  })
+      buildStart() {
+        if (debug) {
+          console.log('[rapid-ssr-bundler] Build starting with options:', { minify, sourceMap, extensions });
+        }
+      }
+    };
+  });
 
 export const vitePlugin = rapidUnplugin.vite
 export const rollupPlugin = rapidUnplugin.rollup
